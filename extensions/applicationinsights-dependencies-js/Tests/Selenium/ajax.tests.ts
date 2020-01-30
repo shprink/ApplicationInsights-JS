@@ -2097,7 +2097,9 @@ export class AjaxFrozenTests extends TestClass {
 
         // Restore the real fetch
         window.fetch = this._fetch;
-        window["XMLHttpRequest"] = this._xmlHttpRequest;
+        if (this._xmlHttpRequest) {
+            getGlobal()["XMLHttpRequest"] = this._xmlHttpRequest;
+        }
     }
 
     public registerTests() {

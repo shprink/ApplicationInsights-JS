@@ -35,6 +35,19 @@ function _dispatchEvent(target:EventTarget, evnt: Event) {
     }
 }
 
+function _formatMessage(message: any) {
+    if (message && !CoreUtils.isString(message)) {
+        // tslint:disable-next-line: prefer-conditional-expression
+        if (CoreUtils.isFunction(message.toString)) {
+            message = message.toString();
+        } else {
+            message = JSON.stringify(message);
+        }
+    }
+    
+    return message;
+}
+
 export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsights, IAppInsightsInternal {
     public static Version = "2.5.11"; // Not currently used anywhere
 
@@ -576,7 +589,7 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
                 const handled = originalOnError && (originalOnError(message, url, lineNumber, columnNumber, error) as any);
                 if (handled !== true) { // handled could be typeof function
                     instance._onerror({
-                        message,
+                        message: _formatMessage(message),
                         url,
                         lineNumber,
                         columnNumber,

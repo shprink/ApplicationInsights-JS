@@ -51,7 +51,7 @@
         "source-map-loader": "^0.2.3",
         "tslint": "^5.19.0",
         "tslint-config-prettier": "^1.18.0",
-        "typescript": "2.5.3"
+        "typescript": "^3.9.3"
     },
     "dependencies": {
         "@microsoft/dynamicproto-js": "^1.1.0",

@@ -12,6 +12,7 @@ declare var globalThis: Window;
 declare var global: Window;
 declare var __extends:(d: any, b: any) => any;
 declare var __assign:(t: any) => any;
+declare var __spreadArrays:(args: any[][]) => any[];
 
 /**
  * Returns the current global scope object, for a normal web page this will be the current
@@ -107,10 +108,24 @@ export function __extendsFn(d: any, b: any) {
     d[strShimPrototype] = b === null ? objCreateFn(b) : (__[strShimPrototype] = b[strShimPrototype], new (__ as any)());
 }
 
+export function __spreadArraysFn(args: any[][]): any[] {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) {
+        s += arguments[i].length;
+    }
+
+    for (var r = Array(s), k = 0, i = 0; i < il; i++) {
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++) {
+            r[k] = a[j];
+        }
+    }
+
+    return r;
+};
+
 let globalObj:any = getGlobal() || {};
 
 // tslint:disable: only-arrow-functions
-(function (root: any, assignFn, extendsFn) {
+(function (root: any, assignFn, extendsFn, spreadArraysFn) {
     // Assign the globally scoped versions of the functions -- used when consuming individual ts files
     // If check is to support NativeScript where these are marked as readonly
     if (!root.__assign) {
@@ -119,8 +134,12 @@ let globalObj:any = getGlobal() || {};
     if (!root.__extends) {
         root.__extends = extendsFn;
     }
-})(globalObj, __assignFn, __extendsFn);
+    if (!root.__spreadArrays) {
+        root.__spreadArrays = spreadArraysFn;
+    }
+})(globalObj, __assignFn, __extendsFn, __spreadArraysFn);
 
 // Assign local variables that will be used for embedded scenarios, if check is to support NativeScript where these are marked as readonly
 if (!__assign) { __assign = globalObj.__assign; }
 if (!__extends) { __extends = globalObj.__extends; }
+if (!__spreadArrays) { __spreadArrays = globalObj.__spreadArrays; }

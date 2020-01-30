@@ -558,8 +558,8 @@ export class Util {
      * Checks if error has no meaningful data inside. Ususally such errors are received by window.onerror when error
      * happens in a script from other domain (cross origin, CORS).
      */
-    public static isCrossOriginError(message: string, url: string, lineNumber: number, columnNumber: number, error: Error): boolean {
-        return (message === "Script error." || message === "Script error") && !error;
+    public static isCrossOriginError(message: string|Event, url: string, lineNumber: number, columnNumber: number, error: Error): boolean {
+        return !error && _isString(message) && (message === "Script error." || message === "Script error");
     }
 
     /**

@@ -45,7 +45,7 @@
         "tslint": "^5.19.0",
         "tslint-config-prettier": "^1.18.0",
         "tslint-microsoft-contrib": "^5.2.1",
-        "typescript": "2.5.3",
+        "typescript": "^3.9.3",
         "magic-string": "^0.25.5"
     },
     "dependencies": {

@@ -582,7 +582,7 @@ export class Sender extends BaseTelemetryPlugin implements IChannelControlsAI {
                 }
         
                 xhr.onreadystatechange = () => _self._xhrReadyStateChange(xhr, payload, payload.length);
-                xhr.onerror = (event: ErrorEvent) => _self._onError(payload, _formatErrorMessageXhr(xhr), event);
+                xhr.onerror = (event: ErrorEvent|any) => _self._onError(payload, _formatErrorMessageXhr(xhr), event);
         
                 // compose an array of payloads
                 const batch = _self._buffer.batchPayloads(payload);
@@ -711,7 +711,7 @@ export class Sender extends BaseTelemetryPlugin implements IChannelControlsAI {
                 let _window = getWindow();
                 const xdr = new XDomainRequest();
                 xdr.onload = () => _self._xdrOnLoad(xdr, payload);
-                xdr.onerror = (event: ErrorEvent) => _self._onError(payload, _formatErrorMessageXdr(xdr), event);
+                xdr.onerror = (event: ErrorEvent|any) => _self._onError(payload, _formatErrorMessageXdr(xdr), event);
         
                 // XDomainRequest requires the same protocol as the hosting page.
                 // If the protocol doesn't match, we can't send the telemetry :(.
