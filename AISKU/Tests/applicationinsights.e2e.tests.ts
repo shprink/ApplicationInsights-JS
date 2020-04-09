@@ -1,10 +1,9 @@
 /// <reference path='./TestFramework/Common.ts' />
 import { ApplicationInsights, IApplicationInsights } from '../src/applicationinsights-web'
 import { Sender } from '@microsoft/applicationinsights-channel-js';
-import { IDependencyTelemetry, ContextTagKeys, Util, Event, Trace, Exception, Metric, PageView, PageViewPerformance, RemoteDependencyData, DistributedTracingModes, RequestHeaders } from '@microsoft/applicationinsights-common';
+import { IDependencyTelemetry, ContextTagKeys, Util, Event, Trace, Exception, Metric, PageView, PageViewPerformance, RemoteDependencyData, DistributedTracingModes, RequestHeaders, IAutoExceptionTelemetry } from '@microsoft/applicationinsights-common';
 import { AppInsightsCore, ITelemetryItem, getGlobal } from "@microsoft/applicationinsights-core-js";
 import { TelemetryContext } from '@microsoft/applicationinsights-properties-js';
-import { AjaxPlugin } from '@microsoft/applicationinsights-dependencies-js';
 import { EventValidator } from './TelemetryValidation/EventValidator';
 import { TraceValidator } from './TelemetryValidation/TraceValidator';
 import { ExceptionValidator } from './TelemetryValidation/ExceptionValidator';
@@ -179,22 +178,6 @@ export class ApplicationInsightsTests extends TestClass {
         });
 
         this.testCaseAsync({
-            name: 'E2E.GenericTests: trackException sends to backend',
-            stepDelay: 1,
-            steps: [() => {
-                let exception: Error = null;
-                try {
-                    window['a']['b']();
-                    Assert.ok(false, 'trackException test not run');
-                } catch (e) {
-                    exception = e;
-                    this._ai.trackException({ exception });
-                }
-                Assert.ok(exception);
-            }].concat(this.asserts(1))
-        });
-
-        this.testCaseAsync({
             name: 'E2E.GenericTests: legacy trackException sends to backend',
             stepDelay: 1,
             steps: [() => {
@@ -209,6 +192,108 @@ export class ApplicationInsightsTests extends TestClass {
                 Assert.ok(exception);
             }].concat(this.asserts(1))
         });
+
+        this.testCaseAsync({
+            name: 'E2E.GenericTests: trackException with auto telemetry sends to backend',
+            stepDelay: 1,
+            steps: [() => {
+                let exception: Error = null;
+                try {
+                    window['a']['b']();
+                    Assert.ok(false, 'trackException test not run');
+                } catch (e) {
+                    // Simulating window.onerror option
+                    let autoTelemetry = {
+                        message: e.message,
+                        url: "https://dummy.example.com",
+                        lineNumber: 42,
+                        columnNumber: 53,
+                        error: e,
+                        evt: null
+                    } as IAutoExceptionTelemetry;
+    
+                    exception = e;
+                    this._ai.trackException({ exception: autoTelemetry });
+                }
+                Assert.ok(exception);
+            }].concat(this.asserts(1))
+        });
+
+        this.testCaseAsync({
+            name: 'E2E.GenericTests: trackException with message only sends to backend',
+            stepDelay: 1,
+            steps: [() => {
+                let exception: Error = null;
+                try {
+                    window['a']['b']();
+                    Assert.ok(false, 'trackException test not run');
+                } catch (e) {
+                    // Simulating window.onerror option
+                    let autoTelemetry = {
+                        message: e.toString(),
+                        url: "https://dummy.example.com",
+                        lineNumber: 42,
+                        columnNumber: 53,
+                        error: e.toString(),
+                        evt: null
+                    } as IAutoExceptionTelemetry;
+    
+                    exception = e;
+                    this._ai.trackException({ exception: autoTelemetry });
+                }
+                Assert.ok(exception);
+            }].concat(this.asserts(1))
+        });
+
+        this.testCaseAsync({
+            name: 'E2E.GenericTests: trackException with message holding error sends to backend',
+            stepDelay: 1,
+            steps: [() => {
+                let exception: Error = null;
+                try {
+                    window['a']['b']();
+                    Assert.ok(false, 'trackException test not run');
+                } catch (e) {
+                    // Simulating window.onerror option
+                    let autoTelemetry = {
+                        message: e,
+                        url: "https://dummy.example.com",
+                        lineNumber: 42,
+                        columnNumber: 53,
+                        error: undefined,
+                        evt: null
+                    } as IAutoExceptionTelemetry;
+    
+                    try {
+                        exception = e;
+                        this._ai.trackException({ exception: autoTelemetry });
+                    } catch (e) {
+                        console.log(e);
+                        console.log(e.stack);
+                        Assert.ok(false, e.stack);
+                    }
+                }
+                Assert.ok(exception);
+            }].concat(this.asserts(1))
+        });
+
+        this.testCaseAsync({
+            name: 'E2E.GenericTests: trackException with no Error sends to backend',
+            stepDelay: 1,
+            steps: [() => {
+                let autoTelemetry = {
+                    message: "Test Message",
+                    url: "https://dummy.example.com",
+                    lineNumber: 42,
+                    columnNumber: 53,
+                    error: this,
+                    evt: null
+                } as IAutoExceptionTelemetry;
+                this._ai.trackException({ exception: autoTelemetry });
+                Assert.ok(autoTelemetry);
+            }].concat(this.asserts(1))
+        });
+
 
         this.testCaseAsync({
             name: "TelemetryContext: track metric",

@@ -14,17 +14,22 @@ class PollingAssert {
         const pollingAssert = (nextTestStep) => {
             const timeout = new Date(new Date().getTime() + timeoutSeconds * 1000);
             const polling = () => {
-                if (assertionFunctionReturnsBoolean.apply(this)) {
-                    Assert.ok(true, assertDescription);
-                    nextTestStep();
-                } else if (timeout < new Date()) {
-                    Assert.ok(false, "assert didn't succeed for " + timeout + " seconds: " + assertDescription);
-                    nextTestStep();
-                } else {
-                    setTimeout(polling, pollIntervalMs);
+                try {
+                    if (assertionFunctionReturnsBoolean.apply(this)) {
+                        Assert.ok(true, assertDescription + "[" + (TestClass.currentTestInfo ? TestClass.currentTestInfo.name : "<null>") + "]");
+                        nextTestStep();
+                    } else if (timeout < new Date()) {
+                        Assert.ok(false, "assert didn't succeed for " + timeout + " seconds: " + assertDescription + "[" + (TestClass.currentTestInfo ? TestClass.currentTestInfo.name : "<null>") + "]");
+                        nextTestStep();
+                    } else {
+                        TestClass.orgSetTimeout(polling, pollIntervalMs);
+                    }
+                } catch (e) {
+                    Assert.ok(true, "Polling exception - " + e);
+                    TestClass.orgSetTimeout(polling, pollIntervalMs);
                 }
             }
-            setTimeout(polling, pollIntervalMs);
+            TestClass.orgSetTimeout(polling, pollIntervalMs);
         }
 
         pollingAssert[TestClass.isPollingStepFlag] = true;

@@ -16,6 +16,9 @@ class TestClass {
 
     /** The instance of the currently running suite. */
     public static currentTestClass: TestClass;
+    public static currentTestInfo: TestCase|TestCaseAsync;
+    public static orgSetTimeout: (handler: Function, timeout?: number) => number;
+    public static orgClearTimeout: (handle?: number) => void;
 
     /** Turns on/off sinon's syncronous implementation of setTimeout. On by default. */
     public useFakeTimers: boolean = true;
@@ -64,6 +67,9 @@ class TestClass {
         if (!testInfo.steps) {
             throw new Error("Must specify 'steps' to take asynchronously");
         }
+        if (testInfo.autoComplete === undefined) {
+            testInfo.autoComplete = true;
+        }
 
         // Create a wrapper around the test method so we can do test initilization and cleanup.
         const testMethod = (assert) => {
@@ -71,22 +77,64 @@ class TestClass {
 
             // Save off the instance of the currently running suite.
             TestClass.currentTestClass = this;
+            TestClass.currentTestInfo = testInfo;
+
+            // Save the real clearTimeout (as _testStarting and enable sinon fake timers)
+            const orgClearTimeout = clearTimeout;
+            const orgSetTimeout = setTimeout;
+
+            TestClass.orgSetTimeout = (handler:Function, timeout?:number) => {
+                return orgSetTimeout(handler, timeout);
+            }
+
+            TestClass.orgClearTimeout = (handler:number) => {
+                orgClearTimeout(handler);
+            }
 
             // Run the test.
             try {
-                this._testStarting();
+                let self = this;
+
+                let testComplete = false;
+                let timeOutTimer = null;
+    
+                const testDone = () => {
+                    if (timeOutTimer) {
+                        orgClearTimeout(timeOutTimer);
+                    }
+    
+                    testComplete = true;
+                    // done is QUnit callback indicating the end of the test
+                    self._testCompleted();
+                    done();
+                }
+    
+                if (testInfo.timeOut !== undefined) {
+                    timeOutTimer = orgSetTimeout(() => {
+                        Assert.ok(false, "Test case timed out!");
+                        testComplete = true;
+                        done();
+                    }, testInfo.timeOut);
+                }
+
+                self._testStarting();
 
                 const steps = testInfo.steps;
+                let completed = false;
                 const trigger = () => {
-                    if (steps.length) {
-                        const step = steps.shift();
-
-                        // The callback which activates the next test step. 
-                        const nextTestStepTrigger = () => {
-                            setTimeout(() => {
-                                trigger();
+                    // The callback which activates the next test step. 
+                    const nextTestStepTrigger = () => {
+                        if (!completed) {
+                            orgSetTimeout(() => {
+                                if (!completed) {
+                                    trigger();
+                                }
                             }, testInfo.stepDelay);
-                        };
+                        }
+                    };
+
+                    if (steps.length && !completed) {
+                        const step = steps.shift();
 
                         // There 2 types of test steps - simple and polling.
                         // Upon completion of the simple test step the next test step will be called.
@@ -96,28 +144,26 @@ class TestClass {
                             if (step[TestClass.isPollingStepFlag]) {
                                 step.call(this, nextTestStepTrigger);
                             } else {
-                                step.call(this);
+                                step.call(this, testDone);
                                 nextTestStepTrigger.call(this);
                             }
                         } catch (e) {
-                            this._testCompleted();
                             Assert.ok(false, e.toString());
-
-                            // done is QUnit callback indicating the end of the test
-                            done();
-
+                            testDone();
                             return;
                         }
-                    } else {
-                        this._testCompleted();
-
-                        // done is QUnit callback indicating the end of the test
-                        done();
+                    } else if (!testComplete) {
+                        if (testInfo.autoComplete) {
+                            testDone();
+                        } else {
+                            nextTestStepTrigger();
+                        }
                     }
                 };
 
                 trigger();
             } catch (ex) {
+                console.error("Failed: Unexpected Exception: " + ex);
                 Assert.ok(false, "Unexpected Exception: " + ex);
                 this._testCompleted(true);
 
@@ -127,7 +173,7 @@ class TestClass {
         };
 
         // Register the test with QUnit
-        QUnit.test(testInfo.name, testMethod);
+        QUnit.test(testInfo.name + " - (Async)", testMethod);
     }
 
     /** Register a Javascript unit testcase. */
@@ -141,9 +187,26 @@ class TestClass {
         }
 
         // Create a wrapper around the test method so we can do test initilization and cleanup.
-        const testMethod = () => {
+        const testMethod = (assert) => {
+            // Treating all tests as async, so there is no issues with mixing them
+            let done = assert.async();
+
             // Save off the instance of the currently running suite.
             TestClass.currentTestClass = this;
+            TestClass.currentTestInfo = testInfo;
+
+            // Save the real clearTimeout (as _testStarting and enable sinon fake timers)
+            const orgClearTimeout = clearTimeout;
+            const orgSetTimeout = setTimeout;
+            let failed = false;
+
+            TestClass.orgSetTimeout = (handler:Function, timeout?:number) => {
+                return orgSetTimeout(handler, timeout);
+            }
+
+            TestClass.orgClearTimeout = (handler:number) => {
+                orgClearTimeout(handler);
+            }
 
             // Run the test.
             try {
@@ -151,11 +214,15 @@ class TestClass {
 
                 testInfo.test.call(this);
 
-                this._testCompleted();
+                this._testCompleted(false);
             }
             catch (ex) {
+                console.error("Failed: Unexpected Exception: " + ex);
                 Assert.ok(false, "Unexpected Exception: " + ex);
                 this._testCompleted(true);
+            }
+            finally{
+                done();
             }
         };
 
@@ -199,6 +266,32 @@ class TestClass {
             errorCode,
             { "Content-Type": "application/json" },
             JSON.stringify(data));
+    }
+
+    public getPayloadMessages(spy:SinonSpy, includeInit:boolean = false) {
+        let resultPayload = [];
+        if (spy.called && spy.args && spy.args.length > 0) {
+            spy.args.forEach(call => {
+                call[0].forEach(message => {
+                    // Ignore the internal SendBrowserInfoOnUserInit message (Only occurs when running tests in a browser)
+                    if (includeInit || message.indexOf("AI (Internal): 72 ") === -1) {
+                        resultPayload.push(message);
+                    }
+                })
+            });
+        }
+
+        return resultPayload;
+    }
+
+    public dumpPayloadMessages(spy:SinonSpy) {
+        let msg = "Sent Messages";
+        if (spy.called && spy.args && spy.args.length > 0) {
+            spy.args[0][0].forEach((value, idx) => {
+                msg += "\n" + idx + ":" + value;
+            });
+        }
+        Assert.ok(false, msg);
     }
 
     protected setUserAgent(userAgent: string) {
@@ -329,6 +422,7 @@ class TestClass {
 
         // Clear the instance of the currently running suite.
         TestClass.currentTestClass = null;
+        TestClass.currentTestInfo = null;
     }
 
     private _removeFuncHooks(fn:any) {

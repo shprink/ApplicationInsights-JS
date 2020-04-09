@@ -43,11 +43,11 @@ function _isTypeof(value: any, theType: string): boolean {
     return typeof value === theType;
 };
 
-function _isUndefined(value: any): boolean {
+function _isUndefined(value: any): value is undefined {
     return _isTypeof(value, strShimUndefined) || value === undefined;
 };
 
-function _isNullOrUndefined(value: any): boolean {
+function _isNullOrUndefined(value: any): value is null|undefined {
     return (_isUndefined(value) || value === null);
 }
 
@@ -55,7 +55,7 @@ function _hasOwnProperty(obj: any, prop: string): boolean {
     return obj && Object[strShimPrototype].hasOwnProperty.call(obj, prop);
 };
 
-function _isObject(value: any): boolean {
+function _isObject(value: any): value is object {
     return _isTypeof(value, strShimObject);
 };
 
@@ -272,11 +272,13 @@ export class CoreUtils {
      * @param callbackfn  A function that accepts up to three arguments. forEach calls the callbackfn function one time for each element in the array.
      * @param thisArg  [Optional] An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
      */
-    public static arrForEach<T>(arr: T[], callbackfn: (value: T, index?: number, array?: T[]) => void, thisArg?: any): void {
-        let len = arr.length;
-        for (let idx = 0; idx < len; idx++) {
-            if (idx in arr) {
-                callbackfn.call(thisArg || arr, arr[idx], idx, arr);
+    public static arrForEach<T>(arr: T[], callbackfn: (value: T, index?: number, array?: T[]) => void, thisArg?: any):void {
+        if (arr) {
+            let len = arr.length;
+            for (let idx = 0; idx < len; idx++) {
+                if (idx in arr) {
+                    callbackfn.call(thisArg || arr, arr[idx], idx, arr);
+                }
             }
         }
     }

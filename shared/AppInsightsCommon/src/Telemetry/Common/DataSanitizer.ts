@@ -118,8 +118,10 @@ export class DataSanitizer {
     public static sanitizeException(logger: IDiagnosticLogger, exception: any) {
         let exceptionTrunc : String;
         if (exception) {
-            if (exception.length > DataSanitizer.MAX_EXCEPTION_LENGTH) {
-                exceptionTrunc = exception.substring(0, DataSanitizer.MAX_EXCEPTION_LENGTH);
+            // Make surte its a string
+            let value:string = "" + exception;
+            if (value.length > DataSanitizer.MAX_EXCEPTION_LENGTH) {
+                exceptionTrunc = value.substring(0, DataSanitizer.MAX_EXCEPTION_LENGTH);
                 logger.throwInternal(
                     LoggingSeverity.WARNING, _InternalMessageId.ExceptionTruncated, "exception is too long, it has been truncated to " + DataSanitizer.MAX_EXCEPTION_LENGTH + " characters.",
                     { exception }, true);

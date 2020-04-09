@@ -28,7 +28,7 @@ export interface IExceptionTelemetry extends IPartC {
      * @memberof IExceptionTelemetry
      * @description Error Object(s)
      */
-    exception?: Error;
+    exception?: Error | IAutoExceptionTelemetry;
 
     /**
      * @description Specified severity of exception for use with
@@ -75,10 +75,17 @@ export interface IAutoExceptionTelemetry {
 
     /**
      * @description Error Object (object)
-     * @type {Error}
+     * @type {any}
      * @memberof IAutoExceptionTelemetry
      */
-    error: Error;
+    error: any;
+    
+    /**
+     * @description The event at the time of the exception (object)
+     * @type {Event|string}
+     * @memberof IAutoExceptionTelemetry
+     */
+    evt?: Event|string;
 }
 
 export interface IExceptionInternal extends IPartC {

@@ -379,10 +379,11 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
     * @param systemProperties
     */
     public sendExceptionInternal(exception: IExceptionTelemetry, customProperties?: { [key: string]: any }, systemProperties?: { [key: string]: any }) {
+        const theError = exception.exception || exception.error || new Error(Util.NotSpecified);
         const exceptionPartB = new Exception(
             this.diagLog(),
-            exception.exception || new Error(Util.NotSpecified),
-            exception.properties,
+            theError,
+            exception.properties || customProperties,
             exception.measurements,
             exception.severityLevel,
             exception.id
@@ -410,6 +411,7 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
      */
     public trackException(exception: IExceptionTelemetry, customProperties?: ICustomProperties): void {
         try {
+            exception.id = exception.id || createGuid();
             this.sendExceptionInternal(exception, customProperties);
         } catch (e) {
             this.diagLog().throwInternal(
@@ -426,27 +428,44 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
      * @memberof ApplicationInsights
      */
     public _onerror(exception: IAutoExceptionTelemetry): void {
+        let error = exception && exception.error;
+        let evt = exception && exception.evt;
         try {
-            const properties = {
-                url: (exception && exception.url) || (getDocument()||{} as any).URL,
-                lineNumber: exception.lineNumber,
-                columnNumber: exception.columnNumber,
-                message: exception.message
-            };
-
-            if (Util.isCrossOriginError(exception.message, exception.url, exception.lineNumber, exception.columnNumber, exception.error)) {
-                this._sendCORSException(properties.url);
-            } else {
-                if (!Util.isError(exception.error)) {
-                    const stack = "window.onerror@" + properties.url + ":" + exception.lineNumber + ":" + (exception.columnNumber || 0);
-                    exception.error = new Error(exception.message);
-                    exception.error.stack = stack;
+            if (!evt) {
+                let _window = getWindow();
+                if (_window) {
+                    evt = _window.event;
                 }
-                this.trackException({ exception: exception.error, severityLevel: SeverityLevel.Error }, properties);
+            }
+            const url = (exception && exception.url) || (getDocument()||{} as any).URL;
+
+            if (Util.isCrossOriginError(exception.message, url, exception.lineNumber, exception.columnNumber, error)) {
+                this._sendCORSException({
+                    message: "Script error: The browser's same-origin policy prevents us from getting the details of this exception. Consider using the 'crossorigin' attribute.",
+                    url,
+                    lineNumber: exception.lineNumber || 0,
+                    columnNumber: exception.columnNumber || 0,
+                    error: Exception.formatError(error),
+                    evt: Exception.formatError(evt)
+                });
+            } else {
+                const properties = {
+                    source: "window.onerror@" + url + ":" + (exception.lineNumber || 0) + ":" + (exception.columnNumber || 0),
+                    url: url,
+                    lineNumber: exception.lineNumber,
+                    columnNumber: exception.columnNumber
+                };
+
+                // if (!Util.isError(error)) {
+                //     const stack = "window.onerror@" + url + ":" + exception.lineNumber + ":" + (exception.columnNumber || 0);
+                //     error = new Error(exception.message);
+                //     error.stack = stack;
+                // }
+                this.trackException({ exception: exception, severityLevel: SeverityLevel.Error }, properties);
             }
         } catch (e) {
             const errorString = exception.error ?
-                (exception.error.name + ", " + exception.error.message)
+                (error.name + ", " + error.message)
                 : "null";
 
             this.diagLog().throwInternal(
@@ -576,11 +595,12 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
                 const handled = originalOnError && (originalOnError(message, url, lineNumber, columnNumber, error) as any);
                 if (handled !== true) { // handled could be typeof function
                     instance._onerror({
-                        message,
+                        message: CoreUtils.isString(message) ? message : (message ? message.toString() : null),
                         url,
                         lineNumber,
                         columnNumber,
-                        error
+                        error: error,
+                        evt: _window.event
                     });
                 }
 
@@ -596,14 +616,16 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
             const onunhandledrejection = "onunhandledrejection";
             const originalOnUnhandledRejection = _window[onunhandledrejection];
             _window[onunhandledrejection] = (error: PromiseRejectionEvent) => {
+                const evt = _window.event;
                 const handled = originalOnUnhandledRejection && (originalOnUnhandledRejection.call(_window, error) as any);
                 if (handled !== true) { // handled could be typeof function
                     instance._onerror({
                         message: error.reason.toString(),
-                        error: error.reason instanceof Error ? error.reason : new Error(error.reason.toString()),
+                        error: error,
                         url: _location ? _location.href : "",
                         lineNumber: 0,
-                        columnNumber: 0
+                        columnNumber: 0,
+                        evt: evt
                     });
                 }
 
@@ -710,20 +732,14 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
         this._telemetryInitializers.push(telemetryInitializer);
     }
 
-    private _sendCORSException(url: string) {
-        const exception: IAutoExceptionTelemetry = {
-            message: "Script error: The browser's same-origin policy prevents us from getting the details of this exception. Consider using the 'crossorigin' attribute.",
-            url,
-            lineNumber: 0,
-            columnNumber: 0,
-            error: undefined
-        };
+    private _sendCORSException(exception: IAutoExceptionTelemetry) {
+        
         const telemetryItem: ITelemetryItem = TelemetryItemCreator.create<IAutoExceptionTelemetry>(
             exception,
             Exception.dataType,
             Exception.envelopeType,
             this.diagLog(),
-            { url }
+            { url: exception.url }
         );
 
         this.core.track(telemetryItem);
