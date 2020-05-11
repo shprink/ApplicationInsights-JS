@@ -15,7 +15,7 @@ import {
     IPlugin, IConfiguration, IAppInsightsCore,
     BaseTelemetryPlugin, CoreUtils, ITelemetryItem, IProcessTelemetryContext, ITelemetryPluginChain,
     IDiagnosticLogger, LoggingSeverity, _InternalMessageId, ICustomProperties,
-    getWindow, getDocument, getHistory, getLocation, doPerf, objForEachKey
+    getWindow, getDocument, getHistory, getLocation, doPerf, objForEachKey, createGuid
 } from "@microsoft/applicationinsights-core-js";
 import { PageViewManager, IAppInsightsInternal } from "./Telemetry/PageViewManager";
 import { PageVisitTimeManager } from "./Telemetry/PageVisitTimeManager";
@@ -440,14 +440,14 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
             const url = (exception && exception.url) || (getDocument()||{} as any).URL;
 
             if (Util.isCrossOriginError(exception.message, url, exception.lineNumber, exception.columnNumber, error)) {
-                this._sendCORSException({
-                    message: "Script error: The browser's same-origin policy prevents us from getting the details of this exception. Consider using the 'crossorigin' attribute.",
+                this._sendCORSException(Exception.CreateAutoException(
+                    "Script error: The browser's same-origin policy prevents us from getting the details of this exception. Consider using the 'crossorigin' attribute.",
                     url,
-                    lineNumber: exception.lineNumber || 0,
-                    columnNumber: exception.columnNumber || 0,
-                    error: Exception.formatError(error),
-                    evt: Exception.formatError(evt)
-                });
+                    exception.lineNumber || 0,
+                    exception.columnNumber || 0,
+                    error,
+                    evt
+                ));
             } else {
                 const properties = {
                     source: "window.onerror@" + url + ":" + (exception.lineNumber || 0) + ":" + (exception.columnNumber || 0),
@@ -594,14 +594,14 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
             _window.onerror = (message, url, lineNumber, columnNumber, error) => {
                 const handled = originalOnError && (originalOnError(message, url, lineNumber, columnNumber, error) as any);
                 if (handled !== true) { // handled could be typeof function
-                    instance._onerror({
-                        message: CoreUtils.isString(message) ? message : (message ? message.toString() : null),
+                    instance._onerror(Exception.CreateAutoException(
+                        message,
                         url,
                         lineNumber,
                         columnNumber,
-                        error: error,
-                        evt: _window.event
-                    });
+                        error,
+                        _window.event
+                    ));
                 }
 
                 return handled;
@@ -619,14 +619,14 @@ export class ApplicationInsights extends BaseTelemetryPlugin implements IAppInsi
                 const evt = _window.event;
                 const handled = originalOnUnhandledRejection && (originalOnUnhandledRejection.call(_window, error) as any);
                 if (handled !== true) { // handled could be typeof function
-                    instance._onerror({
-                        message: error.reason.toString(),
-                        error: error,
-                        url: _location ? _location.href : "",
-                        lineNumber: 0,
-                        columnNumber: 0,
-                        evt: evt
-                    });
+                    instance._onerror(Exception.CreateAutoException(
+                        error.reason.toString(),
+                        _location ? _location.href : "",
+                        0,
+                        0,
+                        error,
+                        evt
+                    ));
                 }
 
                 return handled;

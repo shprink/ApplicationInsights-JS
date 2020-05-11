@@ -6,6 +6,65 @@
     <meta http-equiv="Cache-control" content="no-Cache" />
     <title>Tests for Application Insights JavaScript API</title>
     <link rel="stylesheet" href="https://code.jquery.com/qunit/qunit-1.23.1.css">
+    <!-- Page level onerror handled to correctly simulate non-cors handling as cross origin is not available for file:// protocol -->
+    <script>
+        function isStrictMode() {
+            return (typeof this == 'undefined');
+        }
+
+        function throwPageException(value) {
+            if (isStrictMode()) {
+                console && console.log && console.log("Strict mode is enforced -- expected non-strict!");
+                throw "Strict mode is enforced!";
+            }
+
+            throw value;
+        }
+   
+        function capturePageOnError(errorHandler) {
+            if (isStrictMode()) {
+                console && console.log && console.log("Strict mode is enforced -- expected non-strict!");
+            }
+
+            // Ignoring any previous handler
+            window.onerror = function (message, url, lineNumber, columnNumber, error) {
+                if (errorHandler) {
+                    errorHandler._onerror({
+                        message,
+                        url,
+                        lineNumber,
+                        columnNumber,
+                        error: error,
+                        evt: window.event
+                    });
+
+                    return true;
+                }
+            }
+        }
+
+        function captureStrictPageOnError(appInsights) {
+            "use strict";
+            function doCapture() {
+                // Ignoring any previous handler
+                window.onerror = function (message, url, lineNumber, columnNumber, error) {
+                    appInsights._onerror({
+                        message,
+                        url,
+                        lineNumber,
+                        columnNumber,
+                        error: error,
+                        evt: window.event
+                    });
+        
+                    return true;
+                }
+            }
+
+            doCapture();
+        }    
+    </script>
+    <script src="./ExceptionHelper.js"></script>
     <script src="http://sinonjs.org/releases/sinon-2.3.8.js"></script>
     <script src="http://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.js"></script>
     <script src="../../../../common/Tests/Selenium/ModuleLoader.js"></script>
@@ -36,6 +95,9 @@
 
         // Load Common
         modules.add("@microsoft/applicationinsights-common", "./node_modules/@microsoft/applicationinsights-common/browser/applicationinsights-common");
+
+        // Load Channel
+        modules.add("@microsoft/applicationinsights-channel-js", "channel/applicationinsights-channel-js");
 
         var testModule = modules.add("Tests/Selenium/appinsights-analytics.tests", "./appinsights-analytics.tests.js")
         testModule.run = function (tests) {

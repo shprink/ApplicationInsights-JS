@@ -3,8 +3,9 @@
 import { Util, Exception, SeverityLevel, Trace, PageViewPerformance, IConfig, IExceptionInternal, IAppInsights, Event, Metric, PageView, RemoteDependencyData } from "@microsoft/applicationinsights-common";
 import {
     ITelemetryItem, AppInsightsCore,
-    IPlugin, IConfiguration
+    IPlugin, IConfiguration, CoreUtils
 } from "@microsoft/applicationinsights-core-js";
+import { Sender } from "@microsoft/applicationinsights-channel-js"
 import { ApplicationInsights } from "../src/JavaScriptSDK/ApplicationInsights";
 import { EventValidator } from './TelemetryValidation/EventValidator';
 import { TraceValidator } from './TelemetryValidation/TraceValidator';
@@ -14,9 +15,18 @@ import { PageViewPerformanceValidator } from './TelemetryValidation/PageViewPerf
 import { PageViewValidator } from './TelemetryValidation/PageViewValidator';
 import { RemoteDepdencyValidator } from './TelemetryValidation/RemoteDepdencyValidator';
 
+declare class ExceptionHelper {
+    throw: (value:any) => void;
+    capture: (appInsights:IAppInsights) => void;
+    throwStrict: (value:any) => void;
+    captureStrict: (appInsights:IAppInsights) => void;
+};
+
 export class ApplicationInsightsTests extends TestClass {
     private _onerror:any = null;
     private trackSpy:SinonSpy;
+    private throwInternalSpy:SinonSpy;
+    private exceptionHelper: any = new ExceptionHelper();
 
     public testInitialize() {
         this._onerror = window.onerror;
@@ -35,22 +45,6 @@ export class ApplicationInsightsTests extends TestClass {
             window.localStorage.clear();
         }
         window.onerror = this._onerror;
-    }
-
-    public captureOnError(appInsights:IAppInsights) {
-        // Ignoring any previous handler
-        window.onerror = (message, url, lineNumber, columnNumber, error) => {
-            appInsights._onerror({
-                message,
-                url,
-                lineNumber,
-                columnNumber,
-                error: error,
-                evt: window.event
-            });
-
-            return true;
-        }
     }
 
     public causeException(cb:Function) {
@@ -592,30 +586,40 @@ export class ApplicationInsightsTests extends TestClass {
             stepDelay: 1,
             steps: [() => {
                 // setup
-                const plugin = new ChannelPlugin();
+                const sender: Sender = new Sender();
                 const core = new AppInsightsCore();
                 core.initialize(
-                    {instrumentationKey: "key"},
-                    [plugin]
+                    {
+                        instrumentationKey: "key",
+                        extensionConfig: {
+                            [sender.identifier]: {
+                                enableSessionStorageBuffer: false,
+                                maxBatchInterval: 1
+                            }
+                        }                
+                    },
+                    [sender]
                 );
                 const appInsights = new ApplicationInsights();
                 appInsights.initialize({ instrumentationKey: "key" }, core, []);
-
-                const throwInternal = this.sandbox.spy(appInsights.core.logger, "throwInternal");
-
-                // this.trackSpy = this.sandbox.stub(appInsights.core, "track");
-                const sender: any = appInsights.core['_channelController'].channelQueue[0][0];
-                //this.errorSpy = this.sandbox.spy(sender, '_onError');
-                this.trackSpy = this.sandbox.spy(sender, 'processTelemetry');
-
-                this.captureOnError(appInsights);
-                this.causeException(() => {
-                    throw "Text Error";
+                appInsights.addTelemetryInitializer((item: ITelemetryItem) => {
+                    Assert.equal("4.0", item.ver, "Telemetry items inside telemetry initializers should be in CS4.0 format");
                 });
 
+                this.throwInternalSpy = this.sandbox.spy(appInsights.core.logger, "throwInternal");
+                sender._sender = (payload:string[], isAsync:boolean) => {
+                    sender._onSuccess(payload, payload.length);
+                };
+                this.sandbox.spy()
+                this.trackSpy = this.sandbox.spy(sender, "_onSuccess");
+
+                this.exceptionHelper.capture(appInsights);
+                this.causeException(() => {
+                    this.exceptionHelper.throw("Test Text Error!");
+                });
 
                 Assert.ok(!this.trackSpy.calledOnce, "track not called yet");
-                Assert.ok(!throwInternal.called, "No internal errors");
+                Assert.ok(!this.throwInternalSpy.called, "No internal errors");
             }].concat(this.waitForException(1))
             .concat(() => {
 
@@ -624,8 +628,25 @@ export class ApplicationInsightsTests extends TestClass {
                 if (payloadStr.length > 0) {
                     const payload = JSON.parse(payloadStr[0]);
                     const data = payload.data;
-                    Assert.ok(data && data.baseData && data.baseData.properties["prop1"]);
-                    Assert.ok(data && data.baseData && data.baseData.measurements["measurement1"]);
+                    Assert.ok(data, "Has Data");
+                    if (data) {
+                        Assert.ok(data.baseData, "Has BaseData");
+                        let baseData = data.baseData;
+                        if (baseData) {
+                            const ex = baseData.exceptions[0];
+                            Assert.ok(ex.message.indexOf("Test Text Error!") !== -1, "Make sure the error message is present");
+                            Assert.equal("String", ex.typeName, "Got the correct typename");
+                            Assert.ok(ex.stack.length > 0, "Has stack");
+                            Assert.ok(ex.parsedStack, "Stack was parsed");
+                            Assert.ok(ex.hasFullStack, "Stack has been decoded");
+                            Assert.ok(baseData.properties["errorCodeMsg"], "Stringified error code message present");
+                            Assert.ok(baseData.properties["message"]);
+                            Assert.ok(baseData.properties["columnNumber"], "has column number");
+                            Assert.ok(baseData.properties["lineNumber"], "has Line number");
+                            Assert.ok(baseData.properties["url"], "has Url");
+                            Assert.ok(baseData.properties["source"].indexOf("window.onerror@") !== -1, "has source");
+                        }
+                    }
                 }
             })
 
@@ -1226,13 +1247,25 @@ export class ApplicationInsightsTests extends TestClass {
         return trackStub.args[index][0] as ITelemetryItem;
     }
 
+    private checkNoInternalErrors() {
+        if (this.throwInternalSpy) {
+            Assert.ok(this.throwInternalSpy.notCalled, "Check no internal errors");
+            if (this.throwInternalSpy.called) {
+                Assert.ok(false, JSON.stringify(this.throwInternalSpy.args[0]));
+            }
+        }
+    }
+
     private waitForException: any = (expectedCount:number, action: string = "", includeInit:boolean = false) => [
         () => {
             const message = "polling: " + new Date().toISOString() + " " + action;
             Assert.ok(true, message);
             console.log(message);
+            this.checkNoInternalErrors();
+            this.clock.tick(500);
         },
         (PollingAssert.createPollingAssert(() => {
+            this.checkNoInternalErrors();
             let argCount = 0;
             if (this.trackSpy.called) {
                 this.trackSpy.args.forEach(call => {
@@ -1242,33 +1275,37 @@ export class ApplicationInsightsTests extends TestClass {
     
             Assert.ok(true, "* [" + argCount + " of " + expectedCount + "] checking spy " + new Date().toISOString());
 
-            if (argCount >= expectedCount) {
-                const payload = this.trackSpy.args[0][0];
-                const baseType = payload.baseType || payload.data.baseType;
-                // call the appropriate Validate depending on the baseType
-                switch (baseType) {
-                    case Event.dataType:
-                        return EventValidator.EventValidator.Validate(payload, baseType);
-                    case Trace.dataType:
-                        return TraceValidator.TraceValidator.Validate(payload, baseType);
-                    case Exception.dataType:
-                        return ExceptionValidator.ExceptionValidator.Validate(payload, baseType);
-                    case Metric.dataType:
-                        return MetricValidator.MetricValidator.Validate(payload, baseType);
-                    case PageView.dataType:
-                        return PageViewValidator.PageViewValidator.Validate(payload, baseType);
-                    case PageViewPerformance.dataType:
-                        return PageViewPerformanceValidator.PageViewPerformanceValidator.Validate(payload, baseType);
-                    case RemoteDependencyData.dataType:
-                        return RemoteDepdencyValidator.RemoteDepdencyValidator.Validate(payload, baseType);
-
-                    default:
-                        return EventValidator.EventValidator.Validate(payload, baseType);
+            try {
+                if (argCount >= expectedCount) {
+                    const payload = JSON.parse(this.trackSpy.args[0][0]);
+                    const baseType = payload.data.baseType;
+                    // call the appropriate Validate depending on the baseType
+                    switch (baseType) {
+                        case Event.dataType:
+                            return EventValidator.EventValidator.Validate(payload, baseType);
+                        case Trace.dataType:
+                            return TraceValidator.TraceValidator.Validate(payload, baseType);
+                        case Exception.dataType:
+                            return ExceptionValidator.ExceptionValidator.Validate(payload, baseType);
+                        case Metric.dataType:
+                            return MetricValidator.MetricValidator.Validate(payload, baseType);
+                        case PageView.dataType:
+                            return PageViewValidator.PageViewValidator.Validate(payload, baseType);
+                        case PageViewPerformance.dataType:
+                            return PageViewPerformanceValidator.PageViewPerformanceValidator.Validate(payload, baseType);
+                        case RemoteDependencyData.dataType:
+                            return RemoteDepdencyValidator.RemoteDepdencyValidator.Validate(payload, baseType);
+    
+                        default:
+                            return EventValidator.EventValidator.Validate(payload, baseType);
+                    }
                 }
+            } finally {
+                this.clock.tick(500);
             }
             
             return false;
-        }, "sender succeeded", 60, 1000))
+        }, "sender succeeded", 10, 1000))
     ];
 }
 

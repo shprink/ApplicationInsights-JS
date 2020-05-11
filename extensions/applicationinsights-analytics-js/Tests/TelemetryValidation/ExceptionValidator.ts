@@ -1,17 +1,18 @@
 import { ITypeValidator } from './ITypeValidator';
 import { IEnvelope } from '@microsoft/applicationinsights-common';
 import { CommonValidator } from './CommonValidator';
+import { CoreUtils } from "@microsoft/applicationinsights-core-js";
 
 export class ExceptionValidator implements ITypeValidator {
     static ExceptionValidator = new ExceptionValidator();
 
     private static _validateExceptions(exceptions: any[]): boolean {
         // verify exceptions has typeName, message, hasFullStack, stack, parsedStack fields
-        if (!exceptions[0].typeName ||
-            !exceptions[0].message ||
-            !exceptions[0].hasFullStack ||
-            !exceptions[0].stack ||
-            !exceptions[0].parsedStack) {
+        if (CoreUtils.isUndefined(exceptions[0].typeName) ||
+            CoreUtils.isUndefined(exceptions[0].message) ||
+            CoreUtils.isUndefined(exceptions[0].hasFullStack) ||
+            CoreUtils.isUndefined(exceptions[0].stack) ||
+            CoreUtils.isUndefined(exceptions[0].parsedStack)) {
             return false;
         }
         

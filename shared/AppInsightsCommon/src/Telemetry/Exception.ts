@@ -10,44 +10,43 @@ import { FieldType } from '../Enums';
 import { SeverityLevel } from '../Interfaces/Contracts/Generated/SeverityLevel';
 import { Util } from '../Util';
 import { IDiagnosticLogger, CoreUtils } from '@microsoft/applicationinsights-core-js';
-import { IExceptionInternal, IExceptionDetailsInternal, IExceptionStackFrameInternal, IAutoExceptionTelemetry } from '../Interfaces/IExceptionTelemetry';
+import { 
+    IExceptionInternal, IExceptionDetailsInternal, IExceptionStackFrameInternal, IAutoExceptionTelemetry,
+    IStackEntry, IStackDetails 
+} from '../Interfaces/IExceptionTelemetry';
 
 const NoMethod = "<no_method>";
 const c_MaxCallStackLevels = 20;
 const c_MaxCharactersOfAnonymousFunction = 50;
 const strError = "error";
 const strStack = "stack";
-
-interface IStackEntry {
-    signature:string, 
-    args:Array<any>,
-    toString: () => string
-};
-
-interface IStackDetails {
-    src: string,
-    obj: Array<IStackEntry>,
-    cur?: Array<IStackEntry>
-}
+const strStackDetails = "stackDetails";
 
 function _isExceptionDetailsInternal(value:any): value is IExceptionDetailsInternal {
-    return "hasFullStack" in value && "typeName" in value && "parsedStack" in value;
+    return "hasFullStack" in value && "typeName" in value;
 }
 
 function _isExceptionInternal(value:any): value is IExceptionInternal {
     return ("ver" in value && "exceptions" in value && "properties" in value);
 }
 
-function _createStackEntry(signature:string, args:Array<any>): IStackEntry {
+function _createStackEntry(signature:string, args:any[]): IStackEntry {
     return {
-        signature: signature,
-        args: args,
+        signature,
+        args,
         toString: function () { return this.signature; }
     };
 }
 
+function _isStackDetails(details:any): details is IStackDetails {
+    let isUndefined = CoreUtils.isUndefined;
+    return isUndefined(details) && 
+        isUndefined(details.src) && CoreUtils.isString(details.src) &&
+        isUndefined(details.obj) && Util.isArray(details.obj);
+}
+
 function _convertStackObj(errorStack:string): IStackDetails {
-    var stack:Array<IStackEntry> = [];
+    var stack:IStackEntry[] = [];
     var lines = errorStack.split("\n");
     for (var lp = 0; lp < lines.length; lp++) {
         stack.push(_createStackEntry(lines[lp], []));
@@ -60,7 +59,7 @@ function _convertStackObj(errorStack:string): IStackDetails {
 }
 
 function _getOperaStack(errorMessage:string): IStackDetails {
-    var stack:Array<IStackEntry> = [];
+    var stack: IStackEntry[] = [];
     var lines = errorMessage.split("\n");
     for (var lp = 0; lp < lines.length; lp++) {
         var entry = _createStackEntry(lines[lp], []);
@@ -84,7 +83,9 @@ function _getStackFromErrorObj(errorObj:any): IStackDetails {
         try {
             /* Using bracket notation is support older browsers (IE 7/8 -- dont remember the version) that throw when using dot 
             notation for undefined objects and we don't want to loose the error from being reported */
-            if (errorObj[strStack]) {
+            if (CoreUtils.isString(errorObj)) {
+                details = _convertStackObj(errorObj);
+            } else if (errorObj[strStack]) {
                 // Chrome/Firefox
                 details = _convertStackObj(errorObj[strStack]);
             } else if (errorObj[strError]) {
@@ -97,6 +98,10 @@ function _getStackFromErrorObj(errorObj:any): IStackDetails {
                 if (errorObj.exception[strStack]) {
                     details = _convertStackObj(errorObj.exception[strStack]);
                 }
+            } else if (_isStackDetails(errorObj)) {
+                details = errorObj;
+            } else if (_isStackDetails(errorObj[strStackDetails])) {
+                details = errorObj[strStackDetails];
             } else if (window['opera'] && errorObj['message']) {
                 // Opera
                 details = _getOperaStack(errorObj.message);
@@ -144,7 +149,7 @@ function _getCurrentStackTrace() {
             callstackDepth++;
         }
     } catch (e) {
-        let currentStack:Array<IStackEntry> = _getStackFromErrorObj(e).obj;
+        let currentStack: IStackEntry[] = _getStackFromErrorObj(e).obj;
 
         // Log the exception to the stack for better visibility -- this is normally because we tried to walk back through
         // a Javascript method that is set as "use strict" as caller and callee are not supported for these methods.
@@ -157,7 +162,7 @@ function _getCurrentStackTrace() {
     return callStack;
 }
 
-function _getStackTrace(errorObj:any, extraLevelsToSkip:number): IStackDetails {
+function _getStackTrace(errorObj:any, extraLevelsToSkip:number = 6): IStackDetails {
     /// <summary>
     /// Get the current call stack as an array of strings, each element being one level of the stack
     /// This also uses the GetStack() callback to see if partners will be providing the stack for us
@@ -168,7 +173,7 @@ function _getStackTrace(errorObj:any, extraLevelsToSkip:number): IStackDetails {
 
     // Attempt to derrived the stack from any available errorObj.stack (may not be present)
     var stackDetails = _getStackFromErrorObj(errorObj);
-    var callStack:Array<IStackEntry> = _getCurrentStackTrace();
+    var callStack:IStackEntry[] = _getCurrentStackTrace();
 
     // try and remove all internal trace entries
     let idx = 0;
@@ -177,7 +182,8 @@ function _getStackTrace(errorObj:any, extraLevelsToSkip:number): IStackDetails {
     let maxSkip = extraLevelsToSkip + 6;
     for (let lp = extraLevelsToSkip; lp < maxSkip && lp < callStack.length; lp++) {
         let entry = callStack[lp];
-        if (entry.signature.indexOf("trackException") !== -1) {
+        if (entry.signature.indexOf("trackException") !== -1 ||
+            entry.signature.indexOf("_onerror")) {
             extraLevelsToSkip = lp;
             cnt++;
             if (cnt > 2) {
@@ -290,21 +296,21 @@ function _parseStack(stack:IStackDetails): _StackFrame[] {
 
 function _getErrorType(errorType: any) {
     // Gets the Error Type by passing the constructor (used to get the true type of native error object).
+    let typeName = "";
     if (errorType) {
-        if (errorType.name) {
-            return errorType.name;
-        }
-
-        try {
-            var funcNameRegex = /function (.{1,})\(/;
-            var results = (funcNameRegex).exec((errorType).constructor.toString());
-            return (results && results.length > 1) ? results[1] : "";
-        } catch (e) {
-            // Ignore
+        typeName = errorType.typeName || errorType.name || "";
+        if (!typeName) {
+            try {
+                var funcNameRegex = /function (.{1,})\(/;
+                var results = (funcNameRegex).exec((errorType).constructor.toString());
+                typeName = (results && results.length > 1) ? results[1] : "";
+            } catch (e) {
+                // Ignore
+            }
         }
     }
 
-    return "";
+    return typeName;
 }
 
 /**
@@ -349,7 +355,7 @@ export function _formatErrorCode(errorObj:any) {
     return "" + (errorObj || "");
 }
 
-function _expandArguments(methodSignature:string, values:Array<any>) {
+function _expandArguments(methodSignature:string, values:any[]) {
     /// <summary>
     /// Returns a string of all the argument name+value pairs
     /// </summary>
@@ -475,35 +481,6 @@ function _getMethodName(method:IStackEntry, includeFunctionBody?:boolean) {
     return methodSignature;
 }
 
-const strError = "error";
-
-function _isExceptionDetailsInternal(value:any): value is IExceptionDetailsInternal {
-    return "hasFullStack" in value && "typeName" in value;
-}
-
-function _isExceptionInternal(value:any): value is IExceptionInternal {
-    return ("ver" in value && "exceptions" in value && "properties" in value);
-}
-
-function _getErrorType(errorType: any) {
-    // Gets the Error Type by passing the constructor (used to get the true type of native error object).
-    let typeName = "";
-    if (errorType) {
-        typeName = errorType.typeName || errorType.name || "";
-        if (!typeName) {
-            try {
-                var funcNameRegex = /function (.{1,})\(/;
-                var results = (funcNameRegex).exec((errorType).constructor.toString());
-                typeName = (results && results.length > 1) ? results[1] : "";
-            } catch (e) {
-                // Ignore
-            }
-        }
-    }
-
-    return typeName;
-}
-
 export class Exception extends ExceptionData implements ISerializable {
 
     public static envelopeType = "Microsoft.ApplicationInsights.{0}.Exception";
@@ -547,6 +524,28 @@ export class Exception extends ExceptionData implements ISerializable {
         } 
     }
 
+    public static CreateAutoException(
+            message: string,
+            url: string,
+            lineNumber: number,
+            columnNumber: number,
+            error: any,
+            evt?: Event|string,
+            stack?: string
+        ): IAutoExceptionTelemetry {
+
+        return {
+            message: CoreUtils.isString(message) ? message : (message ? "" + message : null),
+            url,
+            lineNumber,
+            columnNumber,
+            error: _formatErrorCode(error),
+            evt: _formatErrorCode(evt),
+            typeName: _getErrorType(error || evt || message),
+            stackDetails: _getStackTrace(stack || error || evt)
+        }
+    }
+
     public static CreateFromInterface(logger: IDiagnosticLogger, exception: IExceptionInternal, properties?: any, measurements?: { [key: string]: number }): Exception {
         const exceptions: _ExceptionDetails[] = exception.exceptions
             && CoreUtils.arrMap(exception.exceptions, (ex: IExceptionDetailsInternal) => _ExceptionDetails.CreateFromInterface(logger, ex));
@@ -585,7 +584,8 @@ export class Exception extends ExceptionData implements ISerializable {
                     hasFullStack: true,
                     message,
                     stack: details,
-                    typeName
+                    typeName,
+                    type: typeName
                 } as ExceptionDetails
             ]
         } as Exception;
@@ -600,6 +600,7 @@ export class _ExceptionDetails extends ExceptionDetails implements ISerializable
         id: FieldType.Default,
         outerId: FieldType.Default,
         typeName: FieldType.Required,
+        type: FieldType.Required,
         message: FieldType.Required,
         hasFullStack: FieldType.Default,
         stack: FieldType.Default,
@@ -614,9 +615,11 @@ export class _ExceptionDetails extends ExceptionDetails implements ISerializable
             if (!Util.isError(error)) {
                 error = error[strError] || error.evt || error;
             }
+
             this.typeName = DataSanitizer.sanitizeString(logger, _getErrorType(error)) || Util.NotSpecified;
+            this.type = this.typeName;
             this.message = DataSanitizer.sanitizeMessage(logger, _formatErrorCode(exception.message || error.message || error.description || error)) || Util.NotSpecified;
-            const stack = _getStackTrace(error, 6);
+            const stack = exception[strStackDetails] || _getStackTrace(error);
             this.parsedStack = _parseStack(stack);
             this[strStack] = DataSanitizer.sanitizeException(logger, _formatStackTrace(stack));
             this.hasFullStack = Util.isArray(this.parsedStack) && this.parsedStack.length > 0;
@@ -627,6 +630,7 @@ export class _ExceptionDetails extends ExceptionDetails implements ISerializable
             }
         } else {
             this.typeName = exception.typeName;
+            this.type = exception.type || exception.typeName;
             this.message = exception.message;
             this[strStack] = exception[strStack];
             this.parsedStack = exception.parsedStack
@@ -642,6 +646,7 @@ export class _ExceptionDetails extends ExceptionDetails implements ISerializable
             id: this.id,
             outerId: this.outerId,
             typeName: this.typeName,
+            type: this.type || this.typeName,
             message: this.message,
             hasFullStack: this.hasFullStack,
             stack: this[strStack],
@@ -666,7 +671,7 @@ export class _StackFrame extends StackFrame implements ISerializable {
 
     // regex to match stack frames from ie/chrome/ff
     // methodName=$2, fileName=$4, lineNo=$5, column=$6
-    public static regex = /^([\s]+at)?([^\@\s\()]*?)(\@|\s\(|\s)([^\(\@\n]+):([0-9]+):([0-9]+)(\)?)$/;
+    public static regex = /^([\s]+at)?[\s]*([^\@\()]+?)[\s]*(\@|\()([^\(\n]+):([0-9]+):([0-9]+)(\)?)$/;
     public static baseSize = 58; // '{"method":"","level":,"assembly":"","fileName":"","line":}'.length
     public sizeInBytes = 0;
 

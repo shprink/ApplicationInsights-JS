@@ -86,6 +86,20 @@ export interface IAutoExceptionTelemetry {
      * @memberof IAutoExceptionTelemetry
      */
     evt?: Event|string;
+
+    /**
+     * @description The provided stack for the error
+     * @type {IStackDetails}
+     * @memberof IAutoExceptionTelemetry
+     */
+    stackDetails?: IStackDetails;
+
+    /**
+     * @description The calculated type of the error
+     * @type {string}
+     * @memberof IAutoExceptionTelemetry
+     */
+    typeName?: string;
 }
 
 export interface IExceptionInternal extends IPartC {
@@ -101,6 +115,7 @@ export interface IExceptionDetailsInternal {
     id: number;
     outerId: number;
     typeName: string;
+    type: string;
     message: string;
     hasFullStack: boolean;
     stack: string;
@@ -114,4 +129,16 @@ export interface IExceptionStackFrameInternal {
     fileName: string;
     line: number;
     pos?: number;
+}
+
+export interface IStackEntry {
+    signature:string, 
+    args: any[],
+    toString: () => string
+};
+
+export interface IStackDetails {
+    src: string,
+    obj: IStackEntry[],
+    cur?: IStackEntry[]
 }

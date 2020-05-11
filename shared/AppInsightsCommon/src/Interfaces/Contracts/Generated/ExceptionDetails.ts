@@ -23,7 +23,8 @@ export class ExceptionDetails {
      * Exception type name.
      */
     public typeName: string;
-
+    public type: string;
+    
     /**
      * Exception message.
      */

@@ -6,7 +6,7 @@ export class CommonValidator implements ITypeValidator {
     static CommonValidator = new CommonValidator();
 
     public Validate(item: IEnvelope, baseType: string): boolean {
-        // verify item has data, name, tags, and time fields
+        // verify item has data, iKey, name, tags, and time fields
         if (!item.data || !item.iKey || !item.name || !item.tags || !item.time) {
             return false;
         };

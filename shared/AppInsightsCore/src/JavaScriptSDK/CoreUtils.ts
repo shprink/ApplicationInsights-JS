@@ -146,6 +146,17 @@ export function objForEachKey(target: any, callbackfn: (name: string, value: any
     }
 }
 
+export function createGuid(): string {
+    function randomHexDigit() {
+        return CoreUtils.randomValue(15); // Get a random value from 0..15
+    }
+
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(GuidRegex, (c) => {
+        const r = (randomHexDigit() | 0), v = (c === 'x' ? r : r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 export class CoreUtils {
     public static _canUseCookies: boolean;
 
@@ -228,16 +239,7 @@ export class CoreUtils {
         CoreUtils._canUseCookies = false;
     }
 
-    public static newGuid(): string {
-        function randomHexDigit() {
-            return CoreUtils.randomValue(15); // Get a random value from 0..15
-        }
-
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(GuidRegex, (c) => {
-            const r = (randomHexDigit() | 0), v = (c === 'x' ? r : r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
+    public static newGuid = createGuid;
 
     /**
      * Convert a date to I.S.O. format in IE8
