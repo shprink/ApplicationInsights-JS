@@ -7,6 +7,11 @@
   "projectFolderMaxDepth": 4,
   "projects": [
     {
+      "packageName": "@microsoft/ai-test-framework",
+      "projectFolder": "common/Tests/Framework",
+      "shouldPublish": true
+    },
+    {
       "packageName": "@microsoft/applicationinsights-rollup-plugin-uglify3-js",
       "projectFolder": "tools/rollup-plugin-uglify3-js",
       "shouldPublish": true

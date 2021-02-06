@@ -24,6 +24,7 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
+      timeout-minutes: 20
     - run: npm install
     - run: npm run build
     - run: npm run test
