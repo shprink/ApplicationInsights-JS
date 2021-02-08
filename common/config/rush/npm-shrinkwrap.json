@@ -5072,9 +5072,9 @@
       "integrity": "sha512-MVuS359B+YzaWqjCL/c+22gfryv+mCBPHAv3zyVI2GN8EY6IRP8VwtasXn8jyyhvvq84R4ImN1OKRtcbIasjYA=="
     },
     "node_modules/uglify-js": {
-      "version": "3.12.6",
-      "resolved": "https://registry.npmjs.org/uglify-js/-/uglify-js-3.12.6.tgz",
-      "integrity": "sha512-aqWHe3DfQmZUDGWBbabZ2eQnJlQd1fKlMUu7gV+MiTuDzdgDw31bI3wA2jLLsV/hNcDP26IfyEgSVoft5+0SVw==",
+      "version": "3.12.7",
+      "resolved": "https://registry.npmjs.org/uglify-js/-/uglify-js-3.12.7.tgz",
+      "integrity": "sha512-SIZhkoh+U/wjW+BHGhVwE9nt8tWJspncloBcFapkpGRwNPqcH8pzX36BXe3TPBjzHWPMUZotpCigak/udWNr1Q==",
       "bin": {
         "uglifyjs": "bin/uglifyjs"
       },
@@ -9285,9 +9285,9 @@
       }
     },
     "uglify-js": {
-      "version": "3.12.6",
-      "resolved": "https://registry.npmjs.org/uglify-js/-/uglify-js-3.12.6.tgz",
-      "integrity": "sha512-aqWHe3DfQmZUDGWBbabZ2eQnJlQd1fKlMUu7gV+MiTuDzdgDw31bI3wA2jLLsV/hNcDP26IfyEgSVoft5+0SVw=="
+      "version": "3.12.7",
+      "resolved": "https://registry.npmjs.org/uglify-js/-/uglify-js-3.12.7.tgz",
+      "integrity": "sha512-SIZhkoh+U/wjW+BHGhVwE9nt8tWJspncloBcFapkpGRwNPqcH8pzX36BXe3TPBjzHWPMUZotpCigak/udWNr1Q=="
     },
     "unc-path-regex": {
       "version": "0.1.2",
