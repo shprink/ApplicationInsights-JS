@@ -7,7 +7,8 @@
     "types": "types/applicationinsights-clickanalytics-js.d.ts",
     "sideEffects": false,
     "scripts": {
-        "build": "npm run build:esm && npm run build:browser && npm run dtsgen",
+        "build": "npm run build:esm && npm run build:browser",
+        "build-gen": "npm run build:esm && npm run build:browser && npm run dtsgen",
         "build:esm": "grunt clickanalytics",
         "build:browser": "rollup -c",
         "test": "grunt clickanalyticstests",

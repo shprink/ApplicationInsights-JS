@@ -11,7 +11,8 @@
         "url": "https://github.com/microsoft/ApplicationInsights-JS/tree/master/extensions/applicationinsights-debugplugin-js"
     },
     "scripts": {
-        "build": "npm run build:esm && npm run build:browser && npm run dtsgen",
+        "build": "npm run build:esm && npm run build:browser",
+        "build-gen": "npm run build:esm && npm run build:browser && npm run dtsgen",
         "build:esm": "grunt debugplugin",
         "build:browser": "rollup -c",
         "test": "",
